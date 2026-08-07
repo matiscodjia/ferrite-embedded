@@ -19,8 +19,10 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
     loop {}
 }
 
-/// Candidat à tester — changer et reflasher entre deux mesures.
-const BAUD: u32 = 921_600;
+/// Calibré empiriquement sur la carte réelle (voir scripts/hil/bench_uart.py) :
+/// 2 000 000 confirmé fiable (2,03 Mbps effectif, contenu vérifié), 2 500 000
+/// et 3 000 000 corrompent/bloquent. Plafond retenu pour le protocole vidéo.
+const BAUD: u32 = 2_000_000;
 
 #[entry]
 fn main() -> ! {
