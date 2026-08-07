@@ -41,7 +41,11 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
 /// pile d'appel, les ISR et le reste du programme. Dépassé -> régime marqué
 /// SKIP, jamais alloué (éviter un stack overflow qui interromprait la suite
 /// des mesures).
-const RAM_SAFETY_BUDGET: usize = 100_000;
+// gray96_k1 (72244 o, 55%) a fait planter la carte (stack overflow -> lockup)
+// même isolé dans sa propre frame : la marge réelle disponible est visiblement
+// bien en dessous de ce que 128K - overhead laissait supposer. Budget resserré
+// en attendant la vraie mesure (voir le "marge au demarrage" affiché plus bas).
+const RAM_SAFETY_BUDGET: usize = 40_000;
 /// Fréquence coeur réelle après `sysclk(168.MHz())` plus bas.
 const SYSCLK_HZ: f32 = 168_000_000.0;
 const TICK_BUDGET_US: f32 = 10_000.0; // 10ms, cadence cible 100Hz
@@ -178,23 +182,36 @@ fn main() -> ! {
     let rcc = dp.RCC.constrain();
     let clocks = rcc.cfgr.use_hse(8.MHz()).sysclk(168.MHz()).freeze();
     defmt::info!("sysclk reel = {} Hz", clocks.sysclk().raw());
+
+    // Marge pile réelle disponible avant le premier régime (même technique que
+    // mem.rs) : c'est LA mesure qui manquait pour caler RAM_SAFETY_BUDGET sur
+    // du réel plutôt que de deviner encore une fois.
+    let sp = cortex_m::register::msp::read();
+    defmt::info!(
+        "SP au demarrage = {:x}, marge = {} octets avant le bas de la RAM",
+        sp,
+        sp - 0x2000_0000
+    );
+
     defmt::info!(
         "=== regime_bench: budget tick=10ms (100Hz), budget RAM securite={} o / 128 Ko ===",
         RAM_SAFETY_BUDGET
     );
 
-    // Le régime de départ (celui déjà mesuré à la main) sert de témoin pour
-    // vérifier que la correction d'horloge ne change rien aux MACs/cycle.
+    // Du plus petit au plus gros régime : si ça replante encore, on garde au
+    // moins les mesures des régimes déjà passés au lieu de tout perdre sur le
+    // premier (gray96_k1 était en tête avant et a fait planter la carte avant
+    // que quoi que ce soit d'autre ne s'exécute).
     bench_regime!(
-        "gray96_k1",
-        H = 96,
-        W = 96,
-        C = 1,
-        K = 1,
+        "rgb32_k4",
+        H = 32,
+        W = 32,
+        C = 3,
+        K = 4,
         KH = 3,
         KW = 3,
         stride = 1,
-        iters = 10
+        iters = 5
     );
     bench_regime!(
         "gray64_k1",
@@ -208,17 +225,6 @@ fn main() -> ! {
         iters = 10
     );
     bench_regime!(
-        "gray64_k4",
-        H = 64,
-        W = 64,
-        C = 1,
-        K = 4,
-        KH = 3,
-        KW = 3,
-        stride = 1,
-        iters = 5
-    );
-    bench_regime!(
         "rgb48_k4",
         H = 48,
         W = 48,
@@ -229,11 +235,27 @@ fn main() -> ! {
         stride = 1,
         iters = 5
     );
+    // Le régime déjà mesuré à la main (conv.rs) — sert de témoin pour vérifier
+    // que la correction d'horloge ne change rien aux MACs/cycle. C'est aussi
+    // celui qui a fait planter la carte la première fois : au-dessus du budget
+    // resserré, donc SKIP tant que la vraie marge n'est pas confirmée par le
+    // print SP ci-dessus.
     bench_regime!(
-        "rgb32_k4",
-        H = 32,
-        W = 32,
-        C = 3,
+        "gray96_k1",
+        H = 96,
+        W = 96,
+        C = 1,
+        K = 1,
+        KH = 3,
+        KW = 3,
+        stride = 1,
+        iters = 10
+    );
+    bench_regime!(
+        "gray64_k4",
+        H = 64,
+        W = 64,
+        C = 1,
         K = 4,
         KH = 3,
         KW = 3,
