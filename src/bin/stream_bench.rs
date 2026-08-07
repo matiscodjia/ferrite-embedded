@@ -83,8 +83,10 @@ macro_rules! bench_stream {
             let t0 = bench::cycles();
             for _ in 0..$iters {
                 cs.push_row(black_box(row));
-                let out: [Scalar; W_OUT] = cs.conv2d(black_box(&kernel));
-                black_box(out);
+                // Pas de black_box() sur la sortie (voir regime_bench.rs pour
+                // le pourquoi : ça a fait planter la carte là-bas en empêchant
+                // la réutilisation du même emplacement pile à chaque tour).
+                let _: [Scalar; W_OUT] = cs.conv2d(black_box(&kernel));
             }
             let elapsed = bench::cycles().wrapping_sub(t0);
             let per_row = elapsed / ($iters as u32);

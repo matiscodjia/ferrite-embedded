@@ -36,34 +36,22 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
     loop {}
 }
 
-// Le print de marge SP par régime (voir plus bas) a montré que la pile réelle
-// consommée par un régime est ~1,5x la somme brute de ses tenseurs
-// (NUMEL_X+NUMEL_F+NUMEL_Y) — probablement l'accumulateur de sortie de
-// tensordot_3 qui n'est pas fusionné avec le buffer de l'appelant (à
-// creuser côté Ferrite séparément). rgb48_k4 (61936 o de tenseurs, donc
-// ~93 Ko réels estimés) a fait planter la carte pile à ce niveau, cohérent
-// avec ce facteur. On modélise ce facteur explicitement au lieu de comparer
-// RAM_BYTES brut au budget, avec de la marge (x2 plutôt que x1,5 mesuré).
-// Test en cours : hypothèse que le vrai coupable était le black_box() sur la
-// sortie de tensordot_3 (retiré ci-dessus), pas un besoin réel de pile plus
-// gros que prévu. Multiplicateur ramené à 1 (RAM_BYTES brut) pour vérifier ;
-// à remonter si ça replante.
+// Root cause trouvée par mesure directe sur cible (print de marge SP par
+// régime + comparaison avec conv.rs, qui tourne sans problème sur la même
+// forme 96x96/C1/K1) : le vrai coupable n'était ni la taille des tenseurs ni
+// une fuite entre régimes, c'était `black_box(out)` appliqué à la SORTIE de
+// tensordot_3 à l'intérieur de la boucle `iters` (conv.rs ne le fait pas,
+// il jette la sortie via `let _ = ...` sans la black-boxer) : ça empêchait
+// le compilateur de réutiliser le même emplacement pile à chaque itération.
+// Une fois retiré (voir plus bas), la pile réellement consommée par régime
+// colle à ~1,0-1,04x la somme brute des tenseurs (NUMEL_X+NUMEL_F+NUMEL_Y),
+// confirmé pour rgb32_k4/gray64_k1/rgb48_k4/gray96_k1. Seuil réel situé
+// entre gray96_k1 (72244 o, OK) et gray64_k4 (78032 o, plante) — budget fixé
+// juste sous cette limite mesurée.
 const STACK_MULTIPLIER: usize = 1;
-/// Budget RAM de sécurité pour la pile réellement consommée par un régime
-/// (RAM_BYTES * STACK_MULTIPLIER), sur les ~127 Ko de marge mesurés au
-/// démarrage. Dépassé -> régime marqué SKIP, jamais alloué.
-//
-// Historique de calibration :
-//   40 000 (comparé à RAM_BYTES brut) -> rgb32_k4 (27120 o) et gray64_k1
-//     (31796 o) confirmés OK.
-//   65 000 (RAM_BYTES brut) -> rgb48_k4 (61936 o) laissé passer, a fait
-//     planter la carte (lockup) alors que la marge affichée avant lui
-//     restait à 33736 o — la pile réelle a dépassé ce qu'annonçait
-//     RAM_BYTES seul.
-//   90 000 (RAM_BYTES * 2 désormais) -> repasse rgb32_k4/gray64_k1 (marge
-//     large), écarte rgb48_k4/gray96_k1/gray64_k4 tant que leur coût réel
-//     n'est pas mesuré avec plus de marge.
-const RAM_SAFETY_BUDGET: usize = 90_000;
+/// Budget RAM de sécurité pour la pile réellement consommée par un régime.
+/// Dépassé -> régime marqué SKIP, jamais alloué.
+const RAM_SAFETY_BUDGET: usize = 75_000;
 /// Fréquence coeur réelle après `sysclk(168.MHz())` plus bas.
 const SYSCLK_HZ: f32 = 168_000_000.0;
 const TICK_BUDGET_US: f32 = 10_000.0; // 10ms, cadence cible 100Hz
