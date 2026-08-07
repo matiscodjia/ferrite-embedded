@@ -48,6 +48,15 @@ const TICK_BUDGET_US: f32 = 10_000.0; // 10ms, cadence cible 100Hz
 
 macro_rules! bench_regime {
     ($name:literal, H=$h:expr, W=$w:expr, C=$c:expr, K=$k:expr, KH=$kh:expr, KW=$kw:expr, stride=$s:expr, iters=$iters:expr) => {{
+        // #[inline(never)] force un vrai appel de fonction : sa pile est
+        // reprise à `ret`, avant l'appel du régime suivant. Sans ça, `main`
+        // ne retournant jamais, les 6 régimes (types de tenseurs distincts,
+        // donc aucune réutilisation d'emplacement pile garantie par LLVM)
+        // additionnent leurs tailles dans un seul prologue au lieu de se
+        // libérer entre deux — c'est ce qui a fait exploser la pile plus tôt
+        // (gray96_k1 + gray64_k1 + ... ≈ 265 Ko pour 128 Ko de RAM).
+        #[inline(never)]
+        fn run_regime() {
         ferrite::conv_shape!(regime, N = 1, C = $c, H = $h, W = $w, K = $k, KH = $kh, KW = $kw, stride = $s);
         const RAM_BYTES: usize = 4 * (regime::NUMEL_X + regime::NUMEL_F + regime::NUMEL_Y);
         const MACS: usize =
@@ -155,6 +164,8 @@ macro_rules! bench_regime {
                 pct_tick
             );
         }
+        }
+        run_regime();
     }};
 }
 

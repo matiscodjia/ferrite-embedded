@@ -46,76 +46,84 @@ const TARGET_HEIGHTS: [(&str, u32); 4] =
 
 macro_rules! bench_stream {
     ($name:literal, W=$w:expr, KH=$kh:expr, KW=$kw:expr, iters=$iters:expr) => {{
-        const W: usize = $w;
-        const KH: usize = $kh;
-        const KW: usize = $kw;
-        const W_OUT: usize = W - KW + 1;
-        const MACS_PER_ROW: usize = W_OUT * KH * KW;
-        const RAM_BYTES: usize = KH * W * core::mem::size_of::<Scalar>();
+        // Même raison que dans regime_bench.rs : forcer un vrai appel de
+        // fonction pour que la pile de chaque régime soit reprise à `ret`
+        // plutôt que de s'additionner à celle des régimes suivants dans le
+        // même prologue de `main`.
+        #[inline(never)]
+        fn run_stream() {
+            const W: usize = $w;
+            const KH: usize = $kh;
+            const KW: usize = $kw;
+            const W_OUT: usize = W - KW + 1;
+            const MACS_PER_ROW: usize = W_OUT * KH * KW;
+            const RAM_BYTES: usize = KH * W * core::mem::size_of::<Scalar>();
 
-        defmt::info!(
-            "{} | W={} noyau={}x{} | sortie {} px/ligne | MACs/ligne={} | ring buffer={} o",
-            $name,
-            W,
-            KH,
-            KW,
-            W_OUT,
-            MACS_PER_ROW,
-            RAM_BYTES
-        );
+            defmt::info!(
+                "{} | W={} noyau={}x{} | sortie {} px/ligne | MACs/ligne={} | ring buffer={} o",
+                $name,
+                W,
+                KH,
+                KW,
+                W_OUT,
+                MACS_PER_ROW,
+                RAM_BYTES
+            );
 
-        let mut cs = ConvStreaming::<W, KH, KW>::new();
-        let kernel: [[Scalar; KW]; KH] = [[1.0; KW]; KH];
-        let row: [Scalar; W] = [1.0; W];
+            let mut cs = ConvStreaming::<W, KH, KW>::new();
+            let kernel: [[Scalar; KW]; KH] = [[1.0; KW]; KH];
+            let row: [Scalar; W] = [1.0; W];
 
-        // Amorce le ring buffer (KH lignes) hors mesure : c'est un régime
-        // transitoire de démarrage, pas le coût par ligne en régime établi.
-        for _ in 0..KH {
-            cs.push_row(black_box(row));
+            // Amorce le ring buffer (KH lignes) hors mesure : c'est un régime
+            // transitoire de démarrage, pas le coût par ligne en régime établi.
+            for _ in 0..KH {
+                cs.push_row(black_box(row));
+            }
+
+            let t0 = bench::cycles();
+            for _ in 0..$iters {
+                cs.push_row(black_box(row));
+                let out: [Scalar; W_OUT] = cs.conv2d(black_box(&kernel));
+                black_box(out);
+            }
+            let elapsed = bench::cycles().wrapping_sub(t0);
+            let per_row = elapsed / ($iters as u32);
+            let cycles_per_mac = per_row as f32 / MACS_PER_ROW as f32;
+            let us_per_row = per_row as f32 / (SYSCLK_HZ / 1_000_000.0);
+
+            defmt::info!(
+                "  -> {} cycles/ligne ({} us, {} cycles/MAC)",
+                per_row,
+                us_per_row,
+                cycles_per_mac
+            );
+
+            defmt::info!("  -> FPS plafond compute-bound (ignore acquisition capteur/DMA) :");
+            for (label, h) in TARGET_HEIGHTS {
+                let max_fps = SYSCLK_HZ / (h as f32 * per_row as f32);
+                defmt::info!("       {} ({} lignes) -> {} fps max", label, h, max_fps);
+            }
+
+            let fps_120 = SYSCLK_HZ / (120.0 * per_row as f32);
+            let fps_240 = SYSCLK_HZ / (240.0 * per_row as f32);
+            let fps_480 = SYSCLK_HZ / (480.0 * per_row as f32);
+            let fps_720 = SYSCLK_HZ / (720.0 * per_row as f32);
+            defmt::info!(
+                "STREAM|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+                $name,
+                W,
+                KH,
+                KW,
+                per_row,
+                us_per_row,
+                cycles_per_mac,
+                fps_120,
+                fps_240,
+                fps_480,
+                fps_720
+            );
         }
-
-        let t0 = bench::cycles();
-        for _ in 0..$iters {
-            cs.push_row(black_box(row));
-            let out: [Scalar; W_OUT] = cs.conv2d(black_box(&kernel));
-            black_box(out);
-        }
-        let elapsed = bench::cycles().wrapping_sub(t0);
-        let per_row = elapsed / ($iters as u32);
-        let cycles_per_mac = per_row as f32 / MACS_PER_ROW as f32;
-        let us_per_row = per_row as f32 / (SYSCLK_HZ / 1_000_000.0);
-
-        defmt::info!(
-            "  -> {} cycles/ligne ({} us, {} cycles/MAC)",
-            per_row,
-            us_per_row,
-            cycles_per_mac
-        );
-
-        defmt::info!("  -> FPS plafond compute-bound (ignore acquisition capteur/DMA) :");
-        for (label, h) in TARGET_HEIGHTS {
-            let max_fps = SYSCLK_HZ / (h as f32 * per_row as f32);
-            defmt::info!("       {} ({} lignes) -> {} fps max", label, h, max_fps);
-        }
-
-        let fps_120 = SYSCLK_HZ / (120.0 * per_row as f32);
-        let fps_240 = SYSCLK_HZ / (240.0 * per_row as f32);
-        let fps_480 = SYSCLK_HZ / (480.0 * per_row as f32);
-        let fps_720 = SYSCLK_HZ / (720.0 * per_row as f32);
-        defmt::info!(
-            "STREAM|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-            $name,
-            W,
-            KH,
-            KW,
-            per_row,
-            us_per_row,
-            cycles_per_mac,
-            fps_120,
-            fps_240,
-            fps_480,
-            fps_720
-        );
+        run_stream();
     }};
 }
 
