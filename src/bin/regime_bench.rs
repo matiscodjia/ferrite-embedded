@@ -44,7 +44,11 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
 // ~93 Ko réels estimés) a fait planter la carte pile à ce niveau, cohérent
 // avec ce facteur. On modélise ce facteur explicitement au lieu de comparer
 // RAM_BYTES brut au budget, avec de la marge (x2 plutôt que x1,5 mesuré).
-const STACK_MULTIPLIER: usize = 2;
+// Test en cours : hypothèse que le vrai coupable était le black_box() sur la
+// sortie de tensordot_3 (retiré ci-dessus), pas un besoin réel de pile plus
+// gros que prévu. Multiplicateur ramené à 1 (RAM_BYTES brut) pour vérifier ;
+// à remonter si ça replante.
+const STACK_MULTIPLIER: usize = 1;
 /// Budget RAM de sécurité pour la pile réellement consommée par un régime
 /// (RAM_BYTES * STACK_MULTIPLIER), sur les ~127 Ko de marge mesurés au
 /// démarrage. Dépassé -> régime marqué SKIP, jamais alloué.
@@ -141,7 +145,14 @@ macro_rules! bench_regime {
 
             let t0 = bench::cycles();
             for _ in 0..$iters {
-                let out: Tensor4D<
+                // Pas de black_box() sur la sortie ici (contrairement à un essai
+                // précédent) : ça empêchait le compilateur de réutiliser le même
+                // emplacement pile à chaque tour de boucle, gonflant l'usage réel
+                // bien au-delà de ce que laissait supposer la taille d'un seul
+                // tenseur de sortie. conv.rs, qui n'a jamais eu ce problème,
+                // jette la sortie via `let _ = ...` sans la black-boxer — même
+                // pattern ici.
+                let _: Tensor4D<
                     { regime::N },
                     { regime::H_OUT },
                     { regime::W_OUT },
@@ -156,7 +167,6 @@ macro_rules! bench_regime {
                     ),
                     black_box(&filters),
                 );
-                black_box(out);
             }
             let elapsed = bench::cycles().wrapping_sub(t0);
             let per_iter = elapsed / ($iters as u32);
