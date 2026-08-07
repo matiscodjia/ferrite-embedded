@@ -37,15 +37,17 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
 }
 
 /// Budget RAM de sécurité pour les tenseurs d'un régime (entrée + banc de
-/// filtres + sortie) : 100 Ko sur les 128 Ko totaux, le reste couvrant la
-/// pile d'appel, les ISR et le reste du programme. Dépassé -> régime marqué
-/// SKIP, jamais alloué (éviter un stack overflow qui interromprait la suite
-/// des mesures).
-// gray96_k1 (72244 o, 55%) a fait planter la carte (stack overflow -> lockup)
-// même isolé dans sa propre frame : la marge réelle disponible est visiblement
-// bien en dessous de ce que 128K - overhead laissait supposer. Budget resserré
-// en attendant la vraie mesure (voir le "marge au demarrage" affiché plus bas).
-const RAM_SAFETY_BUDGET: usize = 40_000;
+/// filtres + sortie). Dépassé -> régime marqué SKIP, jamais alloué (éviter un
+/// stack overflow qui interromprait la suite des mesures).
+//
+// Historique de calibration (recherche du seuil réel par pas, la marge
+// mesurée au démarrage ~127 Ko ne suffit pas à prédire ce seuil — cf. la
+// discussion en PR/commit) :
+//   40 000 -> rgb32_k4 (27120 o) et gray64_k1 (31796 o) confirmés OK
+//   72 244 (gray96_k1) -> a fait planter la carte (lockup), même isolé
+//   65 000 -> tente rgb48_k4 (61936 o) comme prochain point, gray96_k1 reste
+//   SKIP tant que son propre seuil n'est pas confirmé séparément.
+const RAM_SAFETY_BUDGET: usize = 65_000;
 /// Fréquence coeur réelle après `sysclk(168.MHz())` plus bas.
 const SYSCLK_HZ: f32 = 168_000_000.0;
 const TICK_BUDGET_US: f32 = 10_000.0; // 10ms, cadence cible 100Hz
@@ -61,6 +63,17 @@ macro_rules! bench_regime {
         // (gray96_k1 + gray64_k1 + ... ≈ 265 Ko pour 128 Ko de RAM).
         #[inline(never)]
         fn run_regime() {
+        // Marge SP en entrée de CE régime précis : si l'isolation par appel
+        // de fonction marche comme prévu, elle doit rester proche de la
+        // marge mesurée au tout début de main() (avant le premier régime),
+        // peu importe combien de régimes ont déjà tourné avant celui-ci.
+        let sp_entree = cortex_m::register::msp::read();
+        defmt::info!(
+            "  [entree {}] SP={:x}, marge={} o",
+            $name,
+            sp_entree,
+            sp_entree - 0x2000_0000
+        );
         ferrite::conv_shape!(regime, N = 1, C = $c, H = $h, W = $w, K = $k, KH = $kh, KW = $kw, stride = $s);
         const RAM_BYTES: usize = 4 * (regime::NUMEL_X + regime::NUMEL_F + regime::NUMEL_Y);
         const MACS: usize =
