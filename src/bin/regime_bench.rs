@@ -36,18 +36,30 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
     loop {}
 }
 
-/// Budget RAM de sécurité pour les tenseurs d'un régime (entrée + banc de
-/// filtres + sortie). Dépassé -> régime marqué SKIP, jamais alloué (éviter un
-/// stack overflow qui interromprait la suite des mesures).
+// Le print de marge SP par régime (voir plus bas) a montré que la pile réelle
+// consommée par un régime est ~1,5x la somme brute de ses tenseurs
+// (NUMEL_X+NUMEL_F+NUMEL_Y) — probablement l'accumulateur de sortie de
+// tensordot_3 qui n'est pas fusionné avec le buffer de l'appelant (à
+// creuser côté Ferrite séparément). rgb48_k4 (61936 o de tenseurs, donc
+// ~93 Ko réels estimés) a fait planter la carte pile à ce niveau, cohérent
+// avec ce facteur. On modélise ce facteur explicitement au lieu de comparer
+// RAM_BYTES brut au budget, avec de la marge (x2 plutôt que x1,5 mesuré).
+const STACK_MULTIPLIER: usize = 2;
+/// Budget RAM de sécurité pour la pile réellement consommée par un régime
+/// (RAM_BYTES * STACK_MULTIPLIER), sur les ~127 Ko de marge mesurés au
+/// démarrage. Dépassé -> régime marqué SKIP, jamais alloué.
 //
-// Historique de calibration (recherche du seuil réel par pas, la marge
-// mesurée au démarrage ~127 Ko ne suffit pas à prédire ce seuil — cf. la
-// discussion en PR/commit) :
-//   40 000 -> rgb32_k4 (27120 o) et gray64_k1 (31796 o) confirmés OK
-//   72 244 (gray96_k1) -> a fait planter la carte (lockup), même isolé
-//   65 000 -> tente rgb48_k4 (61936 o) comme prochain point, gray96_k1 reste
-//   SKIP tant que son propre seuil n'est pas confirmé séparément.
-const RAM_SAFETY_BUDGET: usize = 65_000;
+// Historique de calibration :
+//   40 000 (comparé à RAM_BYTES brut) -> rgb32_k4 (27120 o) et gray64_k1
+//     (31796 o) confirmés OK.
+//   65 000 (RAM_BYTES brut) -> rgb48_k4 (61936 o) laissé passer, a fait
+//     planter la carte (lockup) alors que la marge affichée avant lui
+//     restait à 33736 o — la pile réelle a dépassé ce qu'annonçait
+//     RAM_BYTES seul.
+//   90 000 (RAM_BYTES * 2 désormais) -> repasse rgb32_k4/gray64_k1 (marge
+//     large), écarte rgb48_k4/gray96_k1/gray64_k4 tant que leur coût réel
+//     n'est pas mesuré avec plus de marge.
+const RAM_SAFETY_BUDGET: usize = 90_000;
 /// Fréquence coeur réelle après `sysclk(168.MHz())` plus bas.
 const SYSCLK_HZ: f32 = 168_000_000.0;
 const TICK_BUDGET_US: f32 = 10_000.0; // 10ms, cadence cible 100Hz
@@ -95,10 +107,13 @@ macro_rules! bench_regime {
             (RAM_BYTES as f32 / 131072.0) * 100.0
         );
 
-        if RAM_BYTES > RAM_SAFETY_BUDGET {
+        const STACK_ESTIMATE: usize = RAM_BYTES * STACK_MULTIPLIER;
+        if STACK_ESTIMATE > RAM_SAFETY_BUDGET {
             defmt::warn!(
-                "  -> SKIP : {} o dépasse le budget RAM de sécurité ({} o) - non exécuté pour ne pas faire déborder la pile",
+                "  -> SKIP : tenseurs={} o, pile reelle estimee~={} o (x{}), depasse le budget ({} o) - non exécuté pour ne pas faire déborder la pile",
                 RAM_BYTES,
+                STACK_ESTIMATE,
+                STACK_MULTIPLIER,
                 RAM_SAFETY_BUDGET
             );
             defmt::info!(
