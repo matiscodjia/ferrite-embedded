@@ -1,0 +1,11 @@
+[build]
+target = "thumbv7em-none-eabihf"
+[target.thumbv7em-none-eabihf]
+runner = "probe-rs run --chip STM32F446RETx --connect-under-reset"
+rustflags = [
+"-C", "linker=flip-link", # detection des debordements de stack
+"-C", "link-arg=-Tlink.x", # script de cortex-m-rt
+"-C", "link-arg=-Tdefmt.x", # table des chaines defmt
+]
+[env]
+DEFMT_LOG = "debug"

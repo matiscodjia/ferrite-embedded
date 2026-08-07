@@ -1,0 +1,73 @@
+[package]
+name = "ferrite-embedded"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+ferrite = {path = "../Ferrite", default-features = false, features = ["defmt"]}
+cortex-m-rt = "0.7.6"
+defmt = "1.1.1"
+defmt-rtt = "1.3.0"
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+stm32f4xx-hal = { version = "0.21", features = ["stm32f446"] }
+
+
+[profile.release]
+opt-level = 3
+lto = true
+debug = 2
+
+# Source - https://stackoverflow.com/a/78424174
+# Posted by 严重违反直播规范, modified by community. See post 'Timeline' for change history
+# Retrieved 2026-08-06, License - CC BY-SA 4.0
+
+[[bin]]
+name = "blinky"
+path = "src/bin/blinky.rs"
+test = false
+doctest = false
+bench = false
+
+
+# Source - https://stackoverflow.com/a/78424174
+# Posted by 严重违反直播规范, modified by community. See post 'Timeline' for change history
+# Retrieved 2026-08-06, License - CC BY-SA 4.0
+
+[[bin]]
+name = "button"
+path = "src/bin/button.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "uart"
+path = "src/bin/uart.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "compute"
+path = "src/bin/compute.rs"
+test = false
+doctest = false
+bench = false
+
+
+[[bin]]
+name = "conv"
+path = "src/bin/conv.rs"
+test = false
+doctest = false
+bench = false
+
+
+[[bin]]
+name = "mem"
+path = "src/bin/memory.rs"
+test = false
+doctest = false
+bench = false
+
