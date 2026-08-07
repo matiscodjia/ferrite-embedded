@@ -71,3 +71,19 @@ test = false
 doctest = false
 bench = false
 
+
+[[bin]]
+name = "regime_bench"
+path = "src/bin/regime_bench.rs"
+test = false
+doctest = false
+bench = false
+
+
+[[bin]]
+name = "stream_bench"
+path = "src/bin/stream_bench.rs"
+test = false
+doctest = false
+bench = false
+

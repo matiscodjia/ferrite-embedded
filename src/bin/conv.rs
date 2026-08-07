@@ -8,7 +8,7 @@ use defmt_rtt as _;
 use ferrite::linalg::{Tensor3D, Tensor4D, tensordot_3};
 use ferrite::sp::{Gaussian3D, filter_bank};
 use panic_probe as _;
-use stm32f4xx_hal::{self as _};
+use stm32f4xx_hal::{pac, prelude::*};
 mod bench {
     use cortex_m::peripheral::{DCB, DWT};
 
@@ -31,8 +31,18 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
 
 #[entry]
 fn main() -> ! {
+    let dp = pac::Peripherals::take().unwrap();
     let mut cp = cortex_m::Peripherals::take().unwrap();
     bench::init(&mut cp.DCB, &mut cp.DWT);
+
+    // Sans ceci, le cœur tourne sur l'horloge de reset par défaut (HSI, 16 MHz)
+    // et pas les 168 MHz que ce fichier suppose plus bas pour convertir les
+    // cycles DWT en µs — un compteur de cycles reste correct à n'importe
+    // quelle fréquence, mais la conversion en temps réel ne l'est pas sans ça.
+    let rcc = dp.RCC.constrain();
+    let clocks = rcc.cfgr.use_hse(8.MHz()).sysclk(168.MHz()).freeze();
+    defmt::info!("sysclk reel = {} Hz", clocks.sysclk().raw());
+
     const N: u32 = 10;
 
     let tensor = Tensor4D::<1, 1, 96, 96, 9216>::new([1.0; 9216]); // 72ko
