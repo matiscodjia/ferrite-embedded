@@ -87,3 +87,11 @@ test = false
 doctest = false
 bench = false
 
+
+[[bin]]
+name = "uart_bench"
+path = "src/bin/uart_bench.rs"
+test = false
+doctest = false
+bench = false
+
