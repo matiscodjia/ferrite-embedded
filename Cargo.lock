@@ -215,6 +215,7 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "ferrite",
+ "libm",
  "panic-probe",
  "stm32f4xx-hal",
 ]

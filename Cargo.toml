@@ -9,6 +9,7 @@ ferrite = {path = "../Ferrite", default-features = false, features = ["defmt"]}
 cortex-m-rt = "0.7.6"
 defmt = "1.1.1"
 defmt-rtt = "1.3.0"
+libm = { version = "0.2.16", default-features = false }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 stm32f4xx-hal = { version = "0.21", features = ["stm32f446"] }
 
@@ -91,6 +92,21 @@ bench = false
 [[bin]]
 name = "uart_bench"
 path = "src/bin/uart_bench.rs"
+test = false
+doctest = false
+bench = false
+
+
+[[bin]]
+name = "scaling_bench"
+path = "src/bin/scaling_bench.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "adaline_anc"
+path = "src/bin/adaline_anc.rs"
 test = false
 doctest = false
 bench = false
