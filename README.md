@@ -1,0 +1,63 @@
+# ferrite-embedded
+
+Hardware-in-the-loop firmware for [`frugal_ml`](https://github.com/matiscodjia/frugal_ml):
+every number in frugal_ml's [`docs/BENCHMARKS.md`](https://github.com/matiscodjia/frugal_ml/blob/main/docs/BENCHMARKS.md)
+was produced by a binary in this repository, flashed to a real board and read
+back over RTT.
+
+(The name dates from before the crate was renamed from `ferrite` to `frugal_ml`.)
+
+- **Board:** NUCLEO-F446RE, STM32F446RE (Cortex-M4F @ 168 MHz, FPU, 512 KB Flash, 128 KB RAM)
+- **Crate under test:** `frugal_ml = "=0.1.1"` from crates.io, `no_std`, no heap
+- **Timing:** DWT cycle counter around `compiler_fence`-bounded regions, `black_box` on inputs and outputs
+- **Stack overflow detection:** [`flip-link`](https://github.com/knurling-rs/flip-link), so an overflow faults instead of silently corrupting `.data`/`.bss`
+
+## Results
+
+| Experiment | Binary | Result |
+|---|---|---|
+| Adaptive noise cancellation (ADALINE / LMS, 16 taps) | `adaline_anc` | **575 cycles ≈ 3.42 µs** per forward + backward + update, a **36.5× margin** on the 125 µs budget at 8 kHz; corr(y, noise) 0.549 → 0.986 |
+| On-device MLP training, `64 → 64 → 32 → 10` | `mlp_train` | **300/300** training accuracy (N = 300) |
+| RAM ceiling for that MLP | `mlp_bisect_*`, `mlp_sweep_*`, `mlp_probe_sp` | +4 % parameters (`64 → 66 → 33 → 10`) faults with a `MemManage`. The compiler reserves **118.77 KB** of stack in one prologue for a network whose weights + gradients need **50.5 KB** (126.4 KB available) |
+| Direct vs streaming 2-D convolution | `regime_bench`, `scaling_bench`, `stream_bench`, `conv` | Cycles per MAC, RAM and the compute-bound FPS ceiling across resolution and channel count, see `scripts/plots/` |
+| Checked vs unchecked indexing in `matmul` | `matmul_unchecked_bench` | 1.25× faster, −8 % on ADALINE (measures the unmerged `try_unchecked` branch, see below) |
+| UART throughput over the ST-Link VCP | `uart_bench`, `scripts/hil/bench_uart.py` | Measured ceiling: 2 Mbaud |
+
+The RAM-ceiling investigation is the most instructive part. A parameter count
+predicted ~50 KB, and the board crashed at 128 KB. Bisecting the hidden-layer
+width (`b66`, `b68`, `b72`, `b80`) and reading the `sub sp, sp, #N` prologue
+showed that inlining the whole `Then`-composed network into `main` makes the
+compiler reserve every intermediate activation at once, about 2× the tensor RAM.
+Marking the layers `#[inline(never)]` made it worse (127.83 KB). This finding
+drives the write-into-provided-buffer `Module` API on frugal_ml's roadmap.
+
+## Layout
+
+```
+src/bin/          one binary per experiment (blinky/button/uart are bring-up)
+src/mlp_dataset.rs  synthetic 10-class dataset, embedded in Flash via include!
+scripts/
+  run_bench.sh       flash one binary, capture its RTT output into scripts/logs/
+  run_bench_auto.sh  same, stops on the "fin <bin>" line, so sweeps run unattended
+  analyze.py         RTT logs -> scripts/csv/
+  plot_scaling.py    scripts/csv/ -> scripts/plots/
+  hil/bench_uart.py  host side of uart_bench
+```
+
+## Running
+
+Requirements: the `thumbv7em-none-eabihf` target (installed by
+`rust-toolchain.toml`), [`probe-rs`](https://probe.rs/) and `flip-link`
+(`cargo install probe-rs-tools flip-link`).
+
+```sh
+cargo build --release --bins                 # build every experiment
+cargo run --release --bin adaline_anc        # flash + stream results over RTT
+scripts/run_bench_auto.sh scaling_bench      # flash, capture to scripts/logs/
+python scripts/analyze.py && python scripts/plot_scaling.py
+```
+
+`matmul_unchecked_bench` calls `Tensor::multiply_unchecked`, which exists only
+on frugal_ml's `try_unchecked` branch. It is gated behind a feature so the
+default build stays green. To run it, point the `frugal_ml` dependency at that
+branch and pass `--features unchecked`.
