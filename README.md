@@ -60,5 +60,11 @@ python scripts/analyze.py && python scripts/plot_scaling.py
 
 `matmul_unchecked_bench` calls `Tensor::multiply_unchecked`, which exists only
 on frugal_ml's `try_unchecked` branch. It is gated behind a feature so the
-default build stays green. To run it, point the `frugal_ml` dependency at that
-branch and pass `--features unchecked`.
+default build stays green. That branch predates the rename, so the crate is
+still called `ferrite` there. To run the bench, swap the dependency line for:
+
+```toml
+frugal_ml = { package = "ferrite", git = "https://github.com/matiscodjia/frugal_ml", branch = "try_unchecked", default-features = false, features = ["defmt"] }
+```
+
+then `cargo run --release --bin matmul_unchecked_bench --features unchecked`.
