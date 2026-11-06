@@ -11,8 +11,8 @@ use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_rt::{ExceptionFrame, exception};
 use defmt_rtt as _;
-use ferrite::linalg::{Tensor3D, Tensor4D, tensordot_3};
-use ferrite::sp::{Gaussian3D, filter_bank};
+use frugal_ml::linalg::{Tensor3D, Tensor4D, tensordot_3};
+use frugal_ml::sp::{Gaussian3D, filter_bank};
 use panic_probe as _;
 use stm32f4xx_hal::{pac, prelude::*};
 
@@ -78,7 +78,7 @@ macro_rules! bench_regime {
             sp_entree,
             sp_entree - 0x2000_0000
         );
-        ferrite::conv_shape!(regime, N = 1, C = $c, H = $h, W = $w, K = $k, KH = $kh, KW = $kw, stride = $s);
+        frugal_ml::conv_shape!(regime, N = 1, C = $c, H = $h, W = $w, K = $k, KH = $kh, KW = $kw, stride = $s);
         const RAM_BYTES: usize = 4 * (regime::NUMEL_X + regime::NUMEL_F + regime::NUMEL_Y);
         const MACS: usize =
             regime::H_OUT * regime::W_OUT * regime::C * regime::KH * regime::KW * regime::K;
@@ -301,6 +301,45 @@ fn main() -> ! {
         stride = 1,
         iters = 5
     );
+
+    // Grille systématique pour l'analyse des deux axes (canaux, résolution) :
+    // K=1 et noyau 3x3 fixés partout pour ne pas mélanger cet effet avec
+    // ceux qu'on veut isoler. Les régimes au-delà du seuil RAM ressortent
+    // SKIP (jamais alloués) mais leur ligne REGIME| porte quand même
+    // H/W/C/RAM_BYTES calculés à la compilation -- assez pour la courbe
+    // "espace" même sans mesure de temps.
+    defmt::info!("=== grille axes canaux x resolution (K=1, noyau 3x3) ===");
+    bench_regime!("grid_c1_016", H = 16, W = 16, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 20);
+    bench_regime!("grid_c1_024", H = 24, W = 24, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 20);
+    bench_regime!("grid_c1_032", H = 32, W = 32, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 20);
+    bench_regime!("grid_c1_040", H = 40, W = 40, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c1_048", H = 48, W = 48, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c1_056", H = 56, W = 56, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c1_064", H = 64, W = 64, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c1_072", H = 72, W = 72, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c1_080", H = 80, W = 80, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c1_088", H = 88, W = 88, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c1_096", H = 96, W = 96, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c1_104", H = 104, W = 104, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c1_112", H = 112, W = 112, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c1_120", H = 120, W = 120, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c1_128", H = 128, W = 128, C = 1, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+
+    bench_regime!("grid_c3_016", H = 16, W = 16, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 20);
+    bench_regime!("grid_c3_024", H = 24, W = 24, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 20);
+    bench_regime!("grid_c3_032", H = 32, W = 32, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 20);
+    bench_regime!("grid_c3_040", H = 40, W = 40, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c3_048", H = 48, W = 48, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c3_056", H = 56, W = 56, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c3_064", H = 64, W = 64, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 10);
+    bench_regime!("grid_c3_072", H = 72, W = 72, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c3_080", H = 80, W = 80, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c3_088", H = 88, W = 88, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c3_096", H = 96, W = 96, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c3_104", H = 104, W = 104, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c3_112", H = 112, W = 112, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c3_120", H = 120, W = 120, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
+    bench_regime!("grid_c3_128", H = 128, W = 128, C = 3, K = 1, KH = 3, KW = 3, stride = 1, iters = 5);
 
     defmt::info!("=== fin regime_bench ===");
     loop {}

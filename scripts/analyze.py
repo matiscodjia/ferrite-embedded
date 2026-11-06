@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
-"""Analyse automatique des logs RTT de regime_bench / stream_bench.
+"""Analyse automatique des logs RTT de regime_bench / stream_bench / scaling_bench.
 
-Les deux firmwares impriment, en plus des lignes lisibles, une ligne
-compacte par régime préfixée par "REGIME|" ou "STREAM|" — ce script les
-extrait (peu importe le préfixe [INFO]/[WARN] ou le suffixe
-"(bin src/bin/x.rs:NN)" que probe-rs ajoute autour) et produit un rapport
-Markdown : tableau récapitulatif + verdict de synthèse.
+Les trois firmwares impriment, en plus des lignes lisibles, une ligne
+compacte par régime préfixée par "REGIME|", "STREAM|" ou "SCALE|" — ce
+script les extrait (peu importe le préfixe [INFO]/[WARN] ou le suffixe
+"(bin src/bin/x.rs:NN)" que probe-rs ajoute autour) et produit :
+- un rapport Markdown (tableau récapitulatif + verdict de synthèse) ;
+- avec --csv-dir, un CSV par type de régime pour analyse côté host
+  (voir scripts/plot_scaling.py, à lancer sur la machine hôte, pas la cible).
 
 Usage:
     python3 scripts/analyze.py scripts/logs/regime_bench-20260807-120000.log
     python3 scripts/analyze.py scripts/logs/stream_bench-*.log --out report.md
     python3 scripts/analyze.py some.log another.log   # plusieurs logs à la fois
+    python3 scripts/analyze.py scripts/logs/*.log --csv-dir scripts/csv
 
 Aucune dépendance hors stdlib — voulu portable sans setup côté carte.
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
 REGIME_FIELDS = [
@@ -28,6 +31,10 @@ REGIME_FIELDS = [
 STREAM_FIELDS = [
     "name", "W", "KH", "KW", "cycles_per_row", "us_per_row", "cycles_per_mac",
     "fps_120", "fps_240", "fps_480", "fps_720",
+]
+SCALE_FIELDS = [
+    "name", "C", "W", "cycles_per_row", "us_per_row", "cycles_per_mac",
+    "ram_bytes", "fps_120", "fps_240", "fps_480", "fps_720",
 ]
 
 RAM_TOTAL_BYTES = 128 * 1024
@@ -58,8 +65,8 @@ def _cast(value: str):
         return value
 
 
-def parse_log(path: Path) -> tuple[list[dict], list[dict]]:
-    regimes, streams = [], []
+def parse_log(path: Path) -> tuple[list[dict], list[dict], list[dict]]:
+    regimes, streams, scales = [], [], []
     for raw_line in path.read_text(errors="replace").splitlines():
         if (payload := _extract_tagged(raw_line, "REGIME|")) is not None:
             parts = payload.split("|")[1:]  # drop the "REGIME" tag itself
@@ -71,7 +78,20 @@ def parse_log(path: Path) -> tuple[list[dict], list[dict]]:
             if len(parts) != len(STREAM_FIELDS):
                 continue
             streams.append({k: _cast(v) for k, v in zip(STREAM_FIELDS, parts)})
-    return regimes, streams
+        elif (payload := _extract_tagged(raw_line, "SCALE|")) is not None:
+            parts = payload.split("|")[1:]
+            if len(parts) != len(SCALE_FIELDS):
+                continue
+            scales.append({k: _cast(v) for k, v in zip(SCALE_FIELDS, parts)})
+    return regimes, streams, scales
+
+
+def write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _verdict(pct_tick: float) -> str:
@@ -170,20 +190,26 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("logs", nargs="+", type=Path, help="fichier(s) log RTT à analyser")
     ap.add_argument("--out", type=Path, default=None, help="écrit aussi le rapport dans ce fichier .md")
+    ap.add_argument(
+        "--csv-dir", type=Path, default=None,
+        help="écrit aussi regime.csv/stream.csv/scale.csv (un par type présent) dans ce dossier",
+    )
     args = ap.parse_args()
 
     all_regimes: list[dict] = []
     all_streams: list[dict] = []
+    all_scales: list[dict] = []
     for log_path in args.logs:
         if not log_path.exists():
             print(f"introuvable, ignoré : {log_path}", file=sys.stderr)
             continue
-        r, s = parse_log(log_path)
+        r, s, sc = parse_log(log_path)
         all_regimes += r
         all_streams += s
+        all_scales += sc
 
-    if not all_regimes and not all_streams:
-        print("Aucune ligne REGIME| ou STREAM| trouvée dans les logs fournis.", file=sys.stderr)
+    if not all_regimes and not all_streams and not all_scales:
+        print("Aucune ligne REGIME|, STREAM| ou SCALE| trouvée dans les logs fournis.", file=sys.stderr)
         return 1
 
     parts = ["# Analyse automatique — budget conv & FPS streaming", ""]
@@ -197,6 +223,17 @@ def main() -> int:
     if args.out:
         args.out.write_text(report)
         print(f"\n(rapport aussi écrit dans {args.out})", file=sys.stderr)
+
+    if args.csv_dir:
+        if all_regimes:
+            write_csv(args.csv_dir / "regime.csv", REGIME_FIELDS, all_regimes)
+            print(f"CSV écrit : {args.csv_dir / 'regime.csv'} ({len(all_regimes)} lignes)", file=sys.stderr)
+        if all_streams:
+            write_csv(args.csv_dir / "stream.csv", STREAM_FIELDS, all_streams)
+            print(f"CSV écrit : {args.csv_dir / 'stream.csv'} ({len(all_streams)} lignes)", file=sys.stderr)
+        if all_scales:
+            write_csv(args.csv_dir / "scale.csv", SCALE_FIELDS, all_scales)
+            print(f"CSV écrit : {args.csv_dir / 'scale.csv'} ({len(all_scales)} lignes)", file=sys.stderr)
     return 0
 
 

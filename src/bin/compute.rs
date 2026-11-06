@@ -4,7 +4,7 @@
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use defmt_rtt as _;
-use ferrite::Tensor;
+use frugal_ml::Tensor;
 use panic_probe as _;
 use stm32f4xx_hal::{pac, prelude::*};
 mod bench {

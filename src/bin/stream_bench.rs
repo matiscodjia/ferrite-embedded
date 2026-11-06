@@ -13,8 +13,8 @@ use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_rt::{ExceptionFrame, exception};
 use defmt_rtt as _;
-use ferrite::Scalar;
-use ferrite::sp::ConvStreaming;
+use frugal_ml::Scalar;
+use frugal_ml::sp::ConvStreaming;
 use panic_probe as _;
 use stm32f4xx_hal::{pac, prelude::*};
 
