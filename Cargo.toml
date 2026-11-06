@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
-ferrite = {path = "../Ferrite", default-features = false, features = ["defmt"]}
+frugal_ml = { version = "=0.1.1", default-features = false, features = ["defmt"] }
 cortex-m-rt = "0.7.6"
 defmt = "1.1.1"
 defmt-rtt = "1.3.0"
@@ -13,6 +13,9 @@ libm = { version = "0.2.16", default-features = false }
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 stm32f4xx-hal = { version = "0.21", features = ["stm32f446"] }
 
+
+[features]
+unchecked = []
 
 [profile.release]
 opt-level = 3
@@ -104,6 +107,77 @@ test = false
 doctest = false
 bench = false
 
+
+[[bin]]
+name = "mlp_train"
+path = "src/bin/mlp_train.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_sweep_s96"
+path = "src/bin/mlp_sweep_s96.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_sweep_s112"
+path = "src/bin/mlp_sweep_s112.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_sweep_s128"
+path = "src/bin/mlp_sweep_s128.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_sweep_s160"
+path = "src/bin/mlp_sweep_s160.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_probe_sp"
+path = "src/bin/mlp_probe_sp.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_bisect_b80"
+path = "src/bin/mlp_bisect_b80.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_bisect_b72"
+path = "src/bin/mlp_bisect_b72.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_bisect_b68"
+path = "src/bin/mlp_bisect_b68.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mlp_bisect_b66"
+path = "src/bin/mlp_bisect_b66.rs"
+test = false
+doctest = false
+bench = false
+
 [[bin]]
 name = "adaline_anc"
 path = "src/bin/adaline_anc.rs"
@@ -111,3 +185,14 @@ test = false
 doctest = false
 bench = false
 
+
+# Mesure la branche `try_unchecked` de frugal_ml (pas encore mergée, absente de
+# crates.io). Ne compile qu'en pointant frugal_ml sur cette branche :
+#   cargo run --release --bin matmul_unchecked_bench --features unchecked
+[[bin]]
+name = "matmul_unchecked_bench"
+path = "src/bin/matmul_unchecked_bench.rs"
+required-features = ["unchecked"]
+test = false
+doctest = false
+bench = false

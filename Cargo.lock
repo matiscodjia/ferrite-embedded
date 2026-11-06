@@ -199,14 +199,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrite"
-version = "0.1.0"
-dependencies = [
- "defmt",
- "libm",
-]
-
-[[package]]
 name = "ferrite-embedded"
 version = "0.1.0"
 dependencies = [
@@ -214,10 +206,20 @@ dependencies = [
  "cortex-m-rt",
  "defmt",
  "defmt-rtt",
- "ferrite",
+ "frugal_ml",
  "libm",
  "panic-probe",
  "stm32f4xx-hal",
+]
+
+[[package]]
+name = "frugal_ml"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6811f3962fd269748e307b632d36a4ed18acc13933c3861c90000f329cb0cdcf"
+dependencies = [
+ "defmt",
+ "libm",
 ]
 
 [[package]]

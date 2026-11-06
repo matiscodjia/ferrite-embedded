@@ -5,8 +5,8 @@ use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_rt::{ExceptionFrame, exception};
 use defmt_rtt as _;
-use ferrite::linalg::{Tensor3D, Tensor4D, tensordot_3};
-use ferrite::sp::{Gaussian3D, filter_bank};
+use frugal_ml::linalg::{Tensor3D, Tensor4D, tensordot_3};
+use frugal_ml::sp::{Gaussian3D, filter_bank};
 use panic_probe as _;
 use stm32f4xx_hal::{pac, prelude::*};
 mod bench {

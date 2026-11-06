@@ -16,8 +16,8 @@ use core::sync::atomic::{compiler_fence, Ordering};
 use cortex_m_rt::entry;
 use cortex_m_rt::{exception, ExceptionFrame};
 use defmt_rtt as _;
-use ferrite::autodiff::{mse, Linear, Module, Update};
-use ferrite::{Scalar, Vector};
+use frugal_ml::autodiff::{mse, Linear, Module, Update};
+use frugal_ml::{Scalar, Vector};
 use panic_probe as _;
 use stm32f4xx_hal::{pac, prelude::*};
 

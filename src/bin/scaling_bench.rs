@@ -12,7 +12,7 @@
 //! Pour C canaux, on instancie C `ConvStreaming<W,3,3>` indépendants (un
 //! ring buffer par canal) et on somme leurs sorties — exactement la
 //! décomposition d'une conv multi-canaux (depthwise puis somme). Aucune
-//! modification du cœur `ferrite` : composition de l'API publique
+//! modification du cœur frugal_ml : composition de l'API publique
 //! existante, même pattern que `stream_bench.rs`.
 //!
 //! Émet une ligne `SCALE|...` par régime pour parsing automatique côté
@@ -24,8 +24,8 @@ use core::hint::black_box;
 use cortex_m_rt::entry;
 use cortex_m_rt::{ExceptionFrame, exception};
 use defmt_rtt as _;
-use ferrite::Scalar;
-use ferrite::sp::ConvStreaming;
+use frugal_ml::Scalar;
+use frugal_ml::sp::ConvStreaming;
 use panic_probe as _;
 use stm32f4xx_hal::{pac, prelude::*};
 
